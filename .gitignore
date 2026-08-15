@@ -1,0 +1,59 @@
+# ---- 参考项目（只读，各自带独立 .git，不纳入本仓库） ----
+sample1-ccswitch/
+sample2-documd/
+sample3-dsh/
+
+# ---- 根目录工作文档（不纳入版本控制） ----
+CLAUDE.md
+problems.md
+res.md
+res.md
+tasks.md
+PLAN.md
+
+# ---- 密钥 ----
+testkey.md
+*.key
+.env
+.env.*
+
+# ---- Go ----
+/app/build/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+
+# ---- Wails ----
+/app/build/darwin/
+/app/build/windows/*.syso
+/app/frontend/dist/
+/app/frontend/wailsjs/
+
+# ---- Node ----
+node_modules/
+.npm/
+*.tsbuildinfo
+vite.config.*.timestamp-*
+
+# ---- 程序运行输出（会话导出目录） ----
+/output/
+/out/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+
+# ---- 其它文件 ----
+/app/docs/skeleton-docx-guide.md
+/app/internal/render/docx/skeleton.docx
+res2.md
+docoutput.md
+docskeleton.png

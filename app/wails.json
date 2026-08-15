@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "ccContextRead",
+  "outputfilename": "wails-scaffold",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "VeruYuo",
+    "email": "121081543+HouYou2116@users.noreply.github.com"
+  }
+}
