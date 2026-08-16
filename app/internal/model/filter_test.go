@@ -33,8 +33,8 @@ func TestApply_DefaultConfig_OnlyUserPromptAndAssistantText(t *testing.T) {
 	// CompactBoundary is the one always-on exception (4.3); everything else
 	// under the default config must be gated by its switch.
 	want := map[EventKind]bool{
-		EventUserPrompt:     true,
-		EventAssistantText:  true,
+		EventUserPrompt:      true,
+		EventAssistantText:   true,
 		EventCompactBoundary: true,
 	}
 	for k := range present {
