@@ -10,7 +10,16 @@ import (
 // fails to parse, so callers can fall back gracefully.
 func parseISO8601(v any) (time.Time, bool) {
 	s, ok := v.(string)
-	if !ok || s == "" {
+	if !ok {
+		return time.Time{}, false
+	}
+	return parseISO8601String(s)
+}
+
+// parseISO8601String is the string-typed core of parseISO8601, reused by
+// callers that already hold a decoded string (e.g. record.go).
+func parseISO8601String(s string) (time.Time, bool) {
+	if s == "" {
 		return time.Time{}, false
 	}
 	t, err := time.Parse(time.RFC3339Nano, s)
