@@ -22,6 +22,7 @@ type Record struct {
 	Version     string
 	IsSidechain bool
 	IsMeta      bool
+	AgentID     string // old-format sidechain grouping key (2.2); empty outside isSidechain records
 	Raw         json.RawMessage
 	LineNo      int   // 1-based physical line number in the source file
 	ByteOffset  int64 // byte offset of the line's first byte in the source file
@@ -98,6 +99,7 @@ func parseRecordLine(line []byte, lineNo int, byteOffset int64) (Record, bool) {
 		Version:     stringField(v, "version"),
 		IsSidechain: boolField(v, "isSidechain"),
 		IsMeta:      boolField(v, "isMeta"),
+		AgentID:     stringField(v, "agentId"),
 		Raw:         raw,
 		LineNo:      lineNo,
 		ByteOffset:  byteOffset,
