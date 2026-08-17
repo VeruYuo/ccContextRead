@@ -33,6 +33,7 @@ coverage.html
 /app/build/windows/*.syso
 /app/frontend/dist/
 /app/frontend/wailsjs/
+/app/frontend/package.json.md5
 
 # ---- Node ----
 node_modules/

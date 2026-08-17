@@ -18,17 +18,17 @@ const (
 // FileChange == FileChangeNone, and TruncateChars == 0 (which disables
 // truncation) — use DefaultFilterConfig for the actual UI defaults.
 type FilterConfig struct {
-	UserPrompt       bool
-	AssistantText    bool
-	Thinking         bool
-	ToolUse          bool
-	ToolResult       bool
-	Subagent         bool
-	ContextInjection bool
-	SystemNote       bool
-	CompactSummary   bool
-	FileChange       FileChangeMode
-	TruncateChars    int // <= 0 disables truncation
+	UserPrompt       bool           `json:"userPrompt"`
+	AssistantText    bool           `json:"assistantText"`
+	Thinking         bool           `json:"thinking"`
+	ToolUse          bool           `json:"toolUse"`
+	ToolResult       bool           `json:"toolResult"`
+	Subagent         bool           `json:"subagent"`
+	ContextInjection bool           `json:"contextInjection"`
+	SystemNote       bool           `json:"systemNote"`
+	CompactSummary   bool           `json:"compactSummary"`
+	FileChange       FileChangeMode `json:"fileChange"`
+	TruncateChars    int            `json:"truncateChars"` // <= 0 disables truncation
 }
 
 // DefaultFilterConfig returns the task brief's default: only real user
