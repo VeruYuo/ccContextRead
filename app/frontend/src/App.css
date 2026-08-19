@@ -3,6 +3,40 @@
     display: flex;
     flex-direction: column;
     text-align: left;
+    background-color: var(--color-bg);
+}
+
+:where(#app) button {
+    color: var(--color-text);
+    background-color: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.3rem 0.7rem;
+    cursor: pointer;
+}
+
+:where(#app) button:hover:not(:disabled) {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+:where(#app) button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+#app input[type="text"],
+#app input[type="number"] {
+    color: var(--color-text);
+    background-color: var(--color-card);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+}
+
+#app input[type="checkbox"],
+#app input[type="radio"] {
+    accent-color: var(--color-accent);
 }
 
 .status-bar {
@@ -10,19 +44,20 @@
     align-items: center;
     gap: 1rem;
     padding: 0.5rem 1rem;
-    background-color: rgba(0, 0, 0, 0.2);
+    background-color: var(--color-sidebar);
+    border-bottom: 1px solid var(--color-border);
     font-size: 0.85rem;
 }
 
 .status-path {
-    opacity: 0.7;
+    color: var(--color-text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .status-error {
-    color: #ff8080;
+    color: #C0392B;
     margin-left: auto;
 }
 
@@ -41,7 +76,8 @@
 .layout > aside {
     width: 280px;
     overflow-y: auto;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: var(--color-sidebar);
+    border-right: 1px solid var(--color-border);
 }
 
 .layout > main {
@@ -49,6 +85,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    background-color: var(--color-card);
 }
 
 .session-list {
@@ -59,7 +96,7 @@
 
 .session-list-empty {
     padding: 1rem;
-    opacity: 0.7;
+    color: var(--color-text-secondary);
 }
 
 .session-item {
@@ -69,6 +106,7 @@
     width: 100%;
     padding: 0.5rem 0.75rem;
     border: none;
+    border-bottom: 1px solid var(--color-border);
     background: none;
     color: inherit;
     text-align: left;
@@ -76,14 +114,15 @@
 }
 
 .session-item.selected {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: var(--color-card);
+    box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 .session-item .active-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background-color: #4caf50;
+    background-color: var(--color-accent);
 }
 
 .session-item .active-dot.inactive {
@@ -92,24 +131,34 @@
 
 .session-item .session-title {
     font-size: 0.8rem;
-    opacity: 0.8;
+    color: var(--color-text-secondary);
 }
 
 .session-item .session-time {
     font-size: 0.7rem;
-    opacity: 0.6;
+    color: var(--color-text-secondary);
 }
 
 .tabs {
     display: flex;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.tabs button {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    padding: 0.35rem 0.5rem;
+    cursor: pointer;
+    font: inherit;
 }
 
 .tabs button.active {
+    color: var(--color-accent);
     font-weight: bold;
-    text-decoration: underline;
+    border-bottom: 2px solid var(--color-accent);
 }
 
 .preview {
@@ -119,7 +168,58 @@
 }
 
 .preview-empty {
-    opacity: 0.6;
+    color: var(--color-text-secondary);
+}
+
+.preview pre {
+    background-color: var(--color-sidebar);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    overflow-x: auto;
+}
+
+.preview code,
+.preview pre code {
+    font-family: "Cascadia Code", "Consolas", "SFMono-Regular", Menlo, monospace;
+    font-size: 0.85rem;
+}
+
+.preview .mermaid-block {
+    margin: 0.75rem 0;
+}
+
+.preview .mermaid-block svg {
+    max-width: 100%;
+    height: auto;
+}
+
+.preview .hljs-keyword,
+.preview .hljs-built_in,
+.preview .hljs-type {
+    color: var(--color-accent);
+}
+
+.preview .hljs-string,
+.preview .hljs-attr {
+    color: #6A8759;
+}
+
+.preview .hljs-comment,
+.preview .hljs-quote {
+    color: var(--color-text-secondary);
+    font-style: italic;
+}
+
+.preview .hljs-title,
+.preview .hljs-function,
+.preview .hljs-name {
+    color: #6A8CAF;
+}
+
+.preview .hljs-number,
+.preview .hljs-literal {
+    color: #B5651D;
 }
 
 .settings {
@@ -130,6 +230,8 @@
 
 .settings fieldset {
     margin-bottom: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
 }
 
 .settings label {

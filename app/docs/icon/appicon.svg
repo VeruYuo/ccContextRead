@@ -1,0 +1,15 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <title>ccContextRead — 流动的文档</title>
+  <rect x="64" y="64" width="896" height="896" rx="180" ry="180" fill="#CC785C" />
+  <path
+    d="M 210 620 L 270 500 L 330 620 L 390 500 L 448 560
+       C 500 500 540 660 610 560
+       C 670 480 700 640 770 540
+       C 800 500 810 480 814 460"
+    fill="none"
+    stroke="#FAF9F5"
+    stroke-width="42"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
