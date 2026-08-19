@@ -1,7 +1,7 @@
-import DOMPurify from 'dompurify'
-import { marked } from 'marked'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { UpdateEvent } from '../api'
+import { renderMarkdownHtml } from './markdownRender'
+import { renderMermaidBlocks } from './mermaidRenderer'
 
 interface Props {
   selectedId: string | null
@@ -12,10 +12,21 @@ interface Props {
 // it renders now lives in App, not here, so a tab switch that no longer
 // unmounts this component (or one that did) never loses content.
 export default function Preview({ selectedId, doc }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null)
   const html = useMemo(() => {
     if (!doc) return ''
-    return DOMPurify.sanitize(marked.parse(doc.Markdown) as string)
+    return renderMarkdownHtml(doc.Markdown)
   }, [doc])
+
+  // Mermaid blocks render async, after the synchronous HTML above is already
+  // in the DOM (PLAN.md T1.16): mermaid itself is dynamically imported here
+  // so its ~500KB stays out of the main bundle.
+  useEffect(() => {
+    if (!containerRef.current) return
+    renderMermaidBlocks(containerRef.current).catch((err) => {
+      console.error('ccContextRead: mermaid render failed', err)
+    })
+  }, [html])
 
   if (!selectedId) {
     return <div className="preview preview-empty">从左侧选择一个会话开始监听</div>
@@ -24,5 +35,5 @@ export default function Preview({ selectedId, doc }: Props) {
     return <div className="preview preview-empty">等待第一次写入…</div>
   }
 
-  return <div className="preview" dangerouslySetInnerHTML={{ __html: html }} />
+  return <div ref={containerRef} className="preview" dangerouslySetInnerHTML={{ __html: html }} />
 }
