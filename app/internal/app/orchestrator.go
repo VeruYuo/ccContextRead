@@ -82,6 +82,21 @@ type Orchestrator struct {
 	watcher       *claude.Watcher
 	debounceTimer *time.Timer
 	stopped       bool
+
+	// lastUpdate holds the most-recently emitted UpdateEvent so the frontend
+	// can fetch the current document on demand rather than waiting for the
+	// next file-change event (PLAN.md T1.13).
+	lastUpdate UpdateEvent
+	hasUpdate  bool
+}
+
+// LastUpdate returns the most-recently rendered UpdateEvent and ok=true once
+// at least one pass has completed. Returns ok=false on a freshly created
+// Orchestrator that has never run a pass.
+func (o *Orchestrator) LastUpdate() (UpdateEvent, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.lastUpdate, o.hasUpdate
 }
 
 // NewOrchestrator creates an Orchestrator that reports progress via
@@ -114,6 +129,8 @@ func (o *Orchestrator) Start(sessionPath, outputPath, sessionID string, filter m
 	o.renderOpts = renderOpts
 	o.tailer = claude.NewTailer(sessionPath)
 	o.records = nil
+	o.hasUpdate = false
+	o.lastUpdate = UpdateEvent{}
 	o.stopped = false
 	o.mu.Unlock()
 
@@ -210,7 +227,9 @@ func (o *Orchestrator) process() {
 // the accumulated record set, and writes the result to outputPath,
 // emitting "session:updated" on success. It is a no-op (no write, no
 // emit) when Poll finds nothing new — in particular when the file's tail
-// is an incomplete line (4.5 edge case 1).
+// is an incomplete line (4.5 edge case 1). The first pass always renders,
+// even for an empty file, so LastUpdate returns ok=true immediately after
+// Start (PLAN.md T1.13 empty-session edge case).
 func (o *Orchestrator) runPass() error {
 	o.mu.Lock()
 	if o.stopped {
@@ -223,7 +242,8 @@ func (o *Orchestrator) runPass() error {
 		o.mu.Unlock()
 		return err
 	}
-	if len(recs) == 0 && !fullRescan {
+	firstPass := !o.hasUpdate
+	if len(recs) == 0 && !fullRescan && !firstPass {
 		o.mu.Unlock()
 		return nil
 	}
@@ -249,13 +269,22 @@ func (o *Orchestrator) runPass() error {
 		return fmt.Errorf("write output %q: %w", outputPath, err)
 	}
 
-	o.emitter.Emit("session:updated", UpdateEvent{
+	ev := UpdateEvent{
 		SessionID:  sessionID,
 		Markdown:   md,
 		OutputPath: outputPath,
 		EventCount: len(filtered),
-		Full:       fullRescan,
-	})
+		Full:       fullRescan || firstPass,
+	}
+
+	o.mu.Lock()
+	if !o.stopped {
+		o.lastUpdate = ev
+		o.hasUpdate = true
+	}
+	o.mu.Unlock()
+
+	o.emitter.Emit("session:updated", ev)
 	return nil
 }
 

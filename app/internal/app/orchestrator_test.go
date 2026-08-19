@@ -11,18 +11,20 @@ import (
 	"ccContextRead/internal/render"
 )
 
-// fakeEmitter is a test double for Emitter: it routes "session:updated" and
-// "error" payloads to buffered channels so tests can block-wait on them
-// instead of polling the filesystem.
+// fakeEmitter is a test double for Emitter: it routes "session:updated",
+// "error", and "sessions:changed" payloads to buffered channels so tests
+// can block-wait on them instead of polling the filesystem.
 type fakeEmitter struct {
-	updates chan UpdateEvent
-	errors  chan ErrorEvent
+	updates         chan UpdateEvent
+	errors          chan ErrorEvent
+	sessionsChanged chan struct{}
 }
 
 func newFakeEmitter() *fakeEmitter {
 	return &fakeEmitter{
-		updates: make(chan UpdateEvent, 64),
-		errors:  make(chan ErrorEvent, 64),
+		updates:         make(chan UpdateEvent, 64),
+		errors:          make(chan ErrorEvent, 64),
+		sessionsChanged: make(chan struct{}, 64),
 	}
 }
 
@@ -32,6 +34,8 @@ func (f *fakeEmitter) Emit(event string, data any) {
 		f.updates <- data.(UpdateEvent)
 	case "error":
 		f.errors <- data.(ErrorEvent)
+	case "sessions:changed":
+		f.sessionsChanged <- struct{}{}
 	}
 }
 
@@ -267,6 +271,119 @@ func TestOrchestrator_CompactMidWatch_KeepsWatchingAndFallsBackParent(t *testing
 	const lastFixtureUUID = "33333333-3333-4333-8333-000000000006"
 	appendLine(t, sessionPath, assistantRecordLine("post-compact", lastFixtureUUID, "still alive after compact"))
 	waitForUpdateContaining(t, emitter, "still alive after compact", 3*time.Second)
+}
+
+// TestOrchestrator_LastUpdate_OkFalseBeforeAnyPass verifies that LastUpdate
+// returns ok=false on a freshly created Orchestrator that has never run a pass.
+func TestOrchestrator_LastUpdate_OkFalseBeforeAnyPass(t *testing.T) {
+	orch := newTestOrchestrator(newFakeEmitter())
+	_, ok := orch.LastUpdate()
+	if ok {
+		t.Error("LastUpdate() ok = true before any pass, want false")
+	}
+}
+
+// TestOrchestrator_LastUpdate_ReturnsSnapshotAfterPass verifies that after
+// Start runs its initial synchronous pass, LastUpdate returns ok=true with
+// the rendered Markdown matching what was emitted.
+func TestOrchestrator_LastUpdate_ReturnsSnapshotAfterPass(t *testing.T) {
+	sessionDir := t.TempDir()
+	sessionPath := filepath.Join(sessionDir, "sess1.jsonl")
+	if err := os.WriteFile(sessionPath, []byte(userRecordLine("u1", "", "hello snapshot")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outputPath := filepath.Join(t.TempDir(), "sess1.md")
+
+	emitter := newFakeEmitter()
+	orch := newTestOrchestrator(emitter)
+	if err := orch.Start(sessionPath, outputPath, "sess1", model.DefaultFilterConfig(), render.Options{ImageMode: render.ImagePlaceholder}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer orch.Stop()
+
+	<-emitter.updates // drain initial pass
+
+	ev, ok := orch.LastUpdate()
+	if !ok {
+		t.Fatal("LastUpdate() ok = false after Start, want true")
+	}
+	if ev.SessionID != "sess1" {
+		t.Errorf("LastUpdate().SessionID = %q, want %q", ev.SessionID, "sess1")
+	}
+	if !strings.Contains(ev.Markdown, "hello snapshot") {
+		t.Errorf("LastUpdate().Markdown does not contain %q: %s", "hello snapshot", ev.Markdown)
+	}
+}
+
+// TestOrchestrator_LastUpdate_EmptyFile_OkTrue verifies that Start on an
+// empty session file (zero records) still sets LastUpdate to ok=true with a
+// valid header-only document, so the frontend can distinguish "empty session"
+// from "never started".
+func TestOrchestrator_LastUpdate_EmptyFile_OkTrue(t *testing.T) {
+	sessionDir := t.TempDir()
+	sessionPath := filepath.Join(sessionDir, "empty.jsonl")
+	if err := os.WriteFile(sessionPath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outputPath := filepath.Join(t.TempDir(), "empty.md")
+
+	orch := newTestOrchestrator(newFakeEmitter())
+	if err := orch.Start(sessionPath, outputPath, "empty-sess", model.DefaultFilterConfig(), render.Options{ImageMode: render.ImagePlaceholder}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer orch.Stop()
+
+	ev, ok := orch.LastUpdate()
+	if !ok {
+		t.Fatal("LastUpdate() ok = false for empty session file, want true")
+	}
+	if ev.Markdown == "" {
+		t.Error("LastUpdate().Markdown is empty, want at least a header document")
+	}
+}
+
+// TestOrchestrator_LastUpdate_UpdatedAfterFilterChange verifies that after
+// UpdateFilter forces a full rewrite, LastUpdate returns the new filtered
+// result, not the old snapshot.
+func TestOrchestrator_LastUpdate_UpdatedAfterFilterChange(t *testing.T) {
+	sessionDir := t.TempDir()
+	sessionPath := filepath.Join(sessionDir, "sess1.jsonl")
+	content := userRecordLine("u1", "", "hello") + assistantToolUseLine("t1", "u1", "Bash")
+	if err := os.WriteFile(sessionPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outputPath := filepath.Join(t.TempDir(), "sess1.md")
+
+	emitter := newFakeEmitter()
+	orch := newTestOrchestrator(emitter)
+	defaultFilter := model.DefaultFilterConfig()
+	if err := orch.Start(sessionPath, outputPath, "sess1", defaultFilter, render.Options{ImageMode: render.ImagePlaceholder}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer orch.Stop()
+
+	<-emitter.updates // drain initial pass
+
+	beforeEv, _ := orch.LastUpdate()
+	if strings.Contains(beforeEv.Markdown, "工具调用") {
+		t.Fatal("tool call should be hidden before filter change")
+	}
+
+	toolFilter := defaultFilter
+	toolFilter.ToolUse = true
+	if err := orch.UpdateFilter(toolFilter, render.Options{ImageMode: render.ImagePlaceholder}); err != nil {
+		t.Fatalf("UpdateFilter: %v", err)
+	}
+
+	<-emitter.updates // drain filter-change pass
+
+	afterEv, ok := orch.LastUpdate()
+	if !ok {
+		t.Fatal("LastUpdate() ok = false after UpdateFilter, want true")
+	}
+	if !strings.Contains(afterEv.Markdown, "工具调用") {
+		t.Errorf("LastUpdate().Markdown does not contain tool call after filter change: %s", afterEv.Markdown)
+	}
 }
 
 // TestOrchestrator_OutputDirBecomesUnwritable_EmitsErrorAndStopsWatching

@@ -328,6 +328,187 @@ func TestService_SetFollowActive_SwitchesToMostRecentLiveKnownSession(t *testing
 	}
 }
 
+func TestService_CurrentDocument_OkFalseBeforeWatching(t *testing.T) {
+	svc := NewService(newFakeEmitter(), t.TempDir(), t.TempDir())
+	_, ok := svc.CurrentDocument()
+	if ok {
+		t.Error("CurrentDocument() ok = true before StartWatching, want false")
+	}
+}
+
+func TestService_CurrentDocument_OkFalseAfterStopWatching(t *testing.T) {
+	configDir := t.TempDir()
+	exeDir := t.TempDir()
+	sessionID := "11111111-1111-4111-8111-111111111111"
+	writeSessionFile(t, configDir, "p1", sessionID, "D:/ProjOne", "2026-08-10T09:00:00.000Z", "hello")
+
+	emitter := newFakeEmitter()
+	svc := NewService(emitter, configDir, exeDir)
+	if err := svc.StartWatching(sessionID); err != nil {
+		t.Fatalf("StartWatching() error = %v", err)
+	}
+	<-emitter.updates
+	svc.StopWatching()
+
+	_, ok := svc.CurrentDocument()
+	if ok {
+		t.Error("CurrentDocument() ok = true after StopWatching, want false")
+	}
+}
+
+func TestService_CurrentDocument_ReturnsMostRecentMarkdown(t *testing.T) {
+	configDir := t.TempDir()
+	exeDir := t.TempDir()
+	sessionID := "11111111-1111-4111-8111-111111111111"
+	writeSessionFile(t, configDir, "p1", sessionID, "D:/ProjOne", "2026-08-10T09:00:00.000Z", "current document content")
+
+	emitter := newFakeEmitter()
+	svc := NewService(emitter, configDir, exeDir)
+	if err := svc.StartWatching(sessionID); err != nil {
+		t.Fatalf("StartWatching() error = %v", err)
+	}
+	defer svc.StopWatching()
+	<-emitter.updates
+
+	ev, ok := svc.CurrentDocument()
+	if !ok {
+		t.Fatal("CurrentDocument() ok = false after StartWatching, want true")
+	}
+	if ev.SessionID != sessionID {
+		t.Errorf("CurrentDocument().SessionID = %q, want %q", ev.SessionID, sessionID)
+	}
+	if ev.Markdown == "" {
+		t.Error("CurrentDocument().Markdown is empty")
+	}
+}
+
+func TestService_CurrentDocument_SwitchSession_ReturnsNewSessionDoc(t *testing.T) {
+	configDir := t.TempDir()
+	exeDir := t.TempDir()
+	sid1 := "11111111-1111-4111-8111-111111111111"
+	sid2 := "22222222-2222-4222-8222-222222222222"
+	writeSessionFile(t, configDir, "p1", sid1, "D:/ProjOne", "2026-08-10T09:00:00.000Z", "session one content")
+	writeSessionFile(t, configDir, "p2", sid2, "D:/ProjTwo", "2026-08-11T09:00:00.000Z", "session two content")
+
+	emitter := newFakeEmitter()
+	svc := NewService(emitter, configDir, exeDir)
+
+	if err := svc.StartWatching(sid1); err != nil {
+		t.Fatalf("StartWatching(sid1) error = %v", err)
+	}
+	<-emitter.updates
+
+	if err := svc.StartWatching(sid2); err != nil {
+		t.Fatalf("StartWatching(sid2) error = %v", err)
+	}
+	defer svc.StopWatching()
+	<-emitter.updates
+
+	ev, ok := svc.CurrentDocument()
+	if !ok {
+		t.Fatal("CurrentDocument() ok = false after switching sessions, want true")
+	}
+	if ev.SessionID != sid2 {
+		t.Errorf("CurrentDocument().SessionID = %q, want %q (new session)", ev.SessionID, sid2)
+	}
+}
+
+func TestService_SessionsChanged_EmittedOnStartWatching(t *testing.T) {
+	configDir := t.TempDir()
+	exeDir := t.TempDir()
+	sessionID := "11111111-1111-4111-8111-111111111111"
+	writeSessionFile(t, configDir, "p1", sessionID, "D:/ProjOne", "2026-08-10T09:00:00.000Z", "hello")
+
+	emitter := newFakeEmitter()
+	svc := NewService(emitter, configDir, exeDir)
+	if err := svc.StartWatching(sessionID); err != nil {
+		t.Fatalf("StartWatching() error = %v", err)
+	}
+	defer svc.StopWatching()
+
+	select {
+	case <-emitter.sessionsChanged:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for sessions:changed after StartWatching")
+	}
+}
+
+func TestService_SessionsChanged_EmittedOnStopWatching(t *testing.T) {
+	configDir := t.TempDir()
+	exeDir := t.TempDir()
+	sessionID := "11111111-1111-4111-8111-111111111111"
+	writeSessionFile(t, configDir, "p1", sessionID, "D:/ProjOne", "2026-08-10T09:00:00.000Z", "hello")
+
+	emitter := newFakeEmitter()
+	svc := NewService(emitter, configDir, exeDir)
+	if err := svc.StartWatching(sessionID); err != nil {
+		t.Fatalf("StartWatching() error = %v", err)
+	}
+	// drain the StartWatching event
+	select {
+	case <-emitter.sessionsChanged:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for sessions:changed after StartWatching")
+	}
+
+	svc.StopWatching()
+
+	select {
+	case <-emitter.sessionsChanged:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for sessions:changed after StopWatching")
+	}
+}
+
+func TestService_SessionsChanged_EmittedOnFollowSwitch(t *testing.T) {
+	configDir := t.TempDir()
+	exeDir := t.TempDir()
+	sessionID := "11111111-1111-4111-8111-111111111111"
+	writeSessionFile(t, configDir, "p1", sessionID, "D:/ProjOne", "2026-08-10T09:00:00.000Z", "hello")
+	writeLiveRegistry(t, configDir, os.Getpid(), sessionID, time.Now())
+
+	emitter := newFakeEmitter()
+	svc := NewService(emitter, configDir, exeDir, WithFollowInterval(30*time.Millisecond))
+	defer svc.StopWatching()
+
+	svc.SetFollowActive(true, nil)
+	defer svc.SetFollowActive(false, nil)
+
+	select {
+	case <-emitter.sessionsChanged:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for sessions:changed after follow auto-switch")
+	}
+}
+
+func TestService_CurrentDocument_ConcurrentStartWatching_NoDeadlock(t *testing.T) {
+	configDir := t.TempDir()
+	exeDir := t.TempDir()
+	sessionID := "11111111-1111-4111-8111-111111111111"
+	writeSessionFile(t, configDir, "p1", sessionID, "D:/ProjOne", "2026-08-10T09:00:00.000Z", "hello")
+
+	emitter := newFakeEmitter()
+	svc := NewService(emitter, configDir, exeDir)
+	if err := svc.StartWatching(sessionID); err != nil {
+		t.Fatalf("StartWatching() error = %v", err)
+	}
+	defer svc.StopWatching()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range 50 {
+			svc.CurrentDocument()
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("deadlock detected: CurrentDocument did not return within 3s under concurrent StartWatching")
+	}
+}
+
 func TestService_SetFollowActive_DisablingStopsFurtherSwitches(t *testing.T) {
 	configDir := t.TempDir()
 	exeDir := t.TempDir()

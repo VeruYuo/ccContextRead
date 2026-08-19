@@ -245,6 +245,7 @@ func (s *Service) StartWatching(sessionID string) error {
 	s.orch = orch
 	s.status = StatusInfo{Watching: true, SessionID: sessionID, OutputPath: outputPath}
 	s.mu.Unlock()
+	s.emitter.Emit("sessions:changed", nil)
 	return nil
 }
 
@@ -259,6 +260,21 @@ func (s *Service) StopWatching() {
 	if orch != nil {
 		orch.Stop()
 	}
+	s.emitter.Emit("sessions:changed", nil)
+}
+
+// CurrentDocument returns the most-recently rendered document for the
+// actively watched session, if any. ok=false means either nothing is being
+// watched (StartWatching not yet called, or StopWatching was called) or the
+// active watch has not completed a single render pass.
+func (s *Service) CurrentDocument() (UpdateEvent, bool) {
+	s.mu.Lock()
+	orch := s.orch
+	s.mu.Unlock()
+	if orch == nil {
+		return UpdateEvent{}, false
+	}
+	return orch.LastUpdate()
 }
 
 // Status returns the last known watch status, for the frontend's first
