@@ -146,6 +146,28 @@ func (a *App) GetStatus() ccapp.StatusInfo {
 	return a.svc.Status()
 }
 
+// CurrentDocumentResult wraps Service.CurrentDocument's (UpdateEvent, bool)
+// pair into a single struct: Wails' generated binding only treats a second
+// return value as meaningful when it's an `error` (internal/binding's
+// BoundMethod.Call silently drops any other second value), so a plain
+// (UpdateEvent, bool) signature would lose Ok on the wire. Same fix as
+// OutputDirInfo above.
+type CurrentDocumentResult struct {
+	Event ccapp.UpdateEvent
+	Ok    bool
+}
+
+// GetCurrentDocument returns the most-recently rendered document for the
+// actively watched session, if any (PLAN.md T1.13): it lets the frontend
+// fetch a snapshot on demand — after a tab switch, after selecting a
+// session, or after a follow-mode auto-switch — instead of only relying on
+// the next "session:updated" event, which may already have fired before the
+// frontend was ready to receive it.
+func (a *App) GetCurrentDocument() CurrentDocumentResult {
+	ev, ok := a.svc.CurrentDocument()
+	return CurrentDocumentResult{Event: ev, Ok: ok}
+}
+
 // ListLiveSessions reports every currently-live Claude Code session.
 func (a *App) ListLiveSessions() ([]claude.LiveSession, error) {
 	return a.svc.ListLiveSessions()
