@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { SessionSummary } from '../api'
-import { listSessions } from '../api'
+import { listSessions, useSessionsChanged } from '../api'
+
+// SESSION_LIST_POLL_INTERVAL_MS is the polling fallback for the session
+// list, matching 4.5's "fsnotify 会漏事件" double-channel approach: the
+// sessions:changed event drives immediate refreshes, and polling catches
+// whatever it misses (e.g. a brand-new session created by a process this
+// app never watched, so StartWatching never fired the event).
+const SESSION_LIST_POLL_INTERVAL_MS = 5000
 
 interface Props {
   selectedId: string | null
@@ -11,11 +18,19 @@ export default function SessionList({ selectedId, onSelect }: Props) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  function refresh() {
     listSessions()
       .then(setSessions)
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    refresh()
+    const id = setInterval(refresh, SESSION_LIST_POLL_INTERVAL_MS)
+    return () => clearInterval(id)
   }, [])
+
+  useSessionsChanged(refresh)
 
   if (loading) {
     return <div className="session-list-empty">加载会话列表…</div>

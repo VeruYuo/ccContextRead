@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import type { StatusInfo } from './api'
-import { getStatus, setFollowActive, startWatching, stopWatching, useError, useFollowChanged, useSessionUpdated } from './api'
+import type { StatusInfo, UpdateEvent } from './api'
+import {
+  getCurrentDocument,
+  getStatus,
+  setFollowActive,
+  startWatching,
+  stopWatching,
+  useError,
+  useFollowChanged,
+  useSessionUpdated,
+} from './api'
 import Preview from './views/Preview'
 import SessionList from './views/SessionList'
 import Settings from './views/Settings'
@@ -14,6 +23,10 @@ function App() {
   const [status, setStatus] = useState<StatusInfo | null>(null)
   const [follow, setFollow] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Markdown state lives here, above Preview, so switching tabs (which no
+  // longer unmounts Preview, see below) or re-selecting the same session
+  // doesn't lose it (PLAN.md T1.13 现象一).
+  const [doc, setDoc] = useState<UpdateEvent | null>(null)
 
   useEffect(() => {
     getStatus().then((s) => {
@@ -21,6 +34,26 @@ function App() {
       if (s.Watching) setSelectedId(s.SessionID)
     })
   }, [])
+
+  // Whenever the selected session changes, fetch a snapshot immediately
+  // rather than only waiting for the next session:updated event — that
+  // event may already have fired (e.g. StartWatching's initial synchronous
+  // pass) before selectedId caught up, and there was previously no way to
+  // recover it (PLAN.md T1.13 现象二).
+  useEffect(() => {
+    if (!selectedId) {
+      setDoc(null)
+      return
+    }
+    let cancelled = false
+    getCurrentDocument().then(({ Event, Ok }) => {
+      if (cancelled) return
+      setDoc(Ok ? Event : null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId])
 
   useSessionUpdated((ev) => {
     setStatus({
@@ -30,6 +63,7 @@ function App() {
       EventCount: ev.EventCount,
       LastUpdatedAt: new Date().toISOString(),
     })
+    setDoc((prev) => (ev.SessionID === (prev?.SessionID ?? selectedId) ? ev : prev))
   })
 
   useError((ev) => {
@@ -53,6 +87,7 @@ function App() {
   async function stopSession() {
     await stopWatching()
     setStatus(null)
+    setDoc(null)
   }
 
   async function toggleFollow() {
@@ -92,7 +127,12 @@ function App() {
               设置
             </button>
           </nav>
-          {tab === 'preview' ? <Preview selectedId={selectedId} /> : <Settings />}
+          <div style={{ display: tab === 'preview' ? 'contents' : 'none' }}>
+            <Preview selectedId={selectedId} doc={doc} />
+          </div>
+          <div style={{ display: tab === 'settings' ? 'contents' : 'none' }}>
+            <Settings />
+          </div>
         </main>
       </div>
     </div>

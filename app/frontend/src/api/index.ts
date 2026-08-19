@@ -3,7 +3,7 @@
 // file. No other module may import from "../../wailsjs/..." directly —
 // that keeps a future Wails -> Tauri/Electron migration to a rewrite of
 // this one file.
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import * as Backend from '../../wailsjs/go/main/App'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 
@@ -97,6 +97,15 @@ export interface UpdateEvent {
   Full: boolean
 }
 
+// main.CurrentDocumentResult (GetCurrentDocument's return value). Wrapped
+// in a struct rather than a (UpdateEvent, bool) Go return because Wails'
+// generated binding only preserves a second return value when it's an
+// `error` — any other type is silently dropped on the wire.
+export interface CurrentDocumentResult {
+  Event: UpdateEvent
+  Ok: boolean
+}
+
 // internal/app.ErrorEvent ("error" payload).
 export interface ErrorEvent {
   SessionID: string
@@ -141,6 +150,10 @@ export function getStatus(): Promise<StatusInfo> {
   return Backend.GetStatus()
 }
 
+export function getCurrentDocument(): Promise<CurrentDocumentResult> {
+  return Backend.GetCurrentDocument() as unknown as Promise<CurrentDocumentResult>
+}
+
 export function listLiveSessions(): Promise<LiveSessionInfo[]> {
   return Backend.ListLiveSessions()
 }
@@ -163,14 +176,38 @@ export function onFollowChanged(handler: (sessionID: string) => void): () => voi
   return EventsOn('follow:changed', (sessionID: string) => handler(sessionID))
 }
 
+export function onSessionsChanged(handler: () => void): () => void {
+  return EventsOn('sessions:changed', () => handler())
+}
+
+// useLatestHandlerEffect subscribes once for the component's lifetime
+// (empty deps array) rather than resubscribing on every render — a fresh
+// inline arrow function is a new reference each render, so depending on
+// `handler` directly used to unsubscribe/resubscribe constantly, and events
+// arriving in that gap window were lost (PLAN.md T1.13 附带缺陷). A ref
+// always holds the latest handler so the single, stable subscription still
+// calls current logic.
+function useLatestHandlerEffect<H>(subscribe: (call: (arg: H) => void) => () => void, handler: (arg: H) => void): void {
+  const handlerRef = useRef(handler)
+  handlerRef.current = handler
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => subscribe((arg) => handlerRef.current(arg)), [])
+}
+
 export function useSessionUpdated(handler: (ev: UpdateEvent) => void): void {
-  useEffect(() => onSessionUpdated(handler), [handler])
+  useLatestHandlerEffect(onSessionUpdated, handler)
 }
 
 export function useError(handler: (ev: ErrorEvent) => void): void {
-  useEffect(() => onError(handler), [handler])
+  useLatestHandlerEffect(onError, handler)
 }
 
 export function useFollowChanged(handler: (sessionID: string) => void): void {
-  useEffect(() => onFollowChanged(handler), [handler])
+  useLatestHandlerEffect(onFollowChanged, handler)
+}
+
+export function useSessionsChanged(handler: () => void): void {
+  const handlerRef = useRef(handler)
+  handlerRef.current = handler
+  useEffect(() => onSessionsChanged(() => handlerRef.current()), [])
 }
