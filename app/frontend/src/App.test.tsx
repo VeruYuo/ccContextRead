@@ -134,6 +134,7 @@ beforeEach(() => {
     outputDirOverride: '',
     fallbackApplied: false,
     resolvedOutputDir: 'D:\\ccContextRead',
+    theme: 'system',
   })
   startWatching.mockReset().mockResolvedValue(undefined)
   stopWatching.mockReset().mockResolvedValue(undefined)

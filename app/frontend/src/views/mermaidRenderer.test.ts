@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderMarkdownHtml } from './markdownRender'
 import type { MermaidModule } from './mermaidRenderer'
 import { renderMermaidBlocks } from './mermaidRenderer'
@@ -9,6 +9,18 @@ function makeContainer(markdown: string): HTMLDivElement {
   document.body.appendChild(div)
   return div
 }
+
+function stubPrefersDark(matches: boolean): void {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockReturnValue({ matches, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+  )
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  document.documentElement.removeAttribute('data-theme')
+})
 
 function stubLoader(
   render: MermaidModule['default']['render'],
@@ -155,6 +167,35 @@ describe('renderMermaidBlocks', () => {
     await renderMermaidBlocks(container, loader)
     expect(render).toHaveBeenCalledTimes(2)
     expect(container.querySelector('svg')).not.toBeNull()
+  })
+
+  it('caches rendered SVGs per theme, not just per diagram hash (PLAN.md 12.2.1 ⑤)', async () => {
+    const markdown = '```mermaid\ngraph TD; M-->N;\n```'
+    const render = vi
+      .fn()
+      .mockResolvedValueOnce({ svg: '<svg viewBox="0 0 5 5"></svg>' })
+      .mockResolvedValueOnce({ svg: '<svg viewBox="0 0 6 6"></svg>' })
+    const loader = stubLoader(render)
+
+    stubPrefersDark(false)
+    const lightContainer = makeContainer(markdown)
+    await renderMermaidBlocks(lightContainer, loader)
+    expect(lightContainer.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 5 5')
+
+    stubPrefersDark(true)
+    const darkContainer = makeContainer(markdown)
+    await renderMermaidBlocks(darkContainer, loader)
+    expect(darkContainer.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 6 6')
+
+    expect(render).toHaveBeenCalledTimes(2)
+
+    // re-rendering under the light theme again must still hit the light
+    // cache entry rather than re-rendering a third time.
+    stubPrefersDark(false)
+    const lightAgain = makeContainer(markdown)
+    await renderMermaidBlocks(lightAgain, loader)
+    expect(lightAgain.querySelector('svg')?.getAttribute('viewBox')).toBe('0 0 5 5')
+    expect(render).toHaveBeenCalledTimes(2)
   })
 
   it('removes the mermaid-library error node left in document.body before rejecting, and degrades to a fallback code block', async () => {

@@ -1,6 +1,6 @@
 // Pure state-transition helpers for Settings.tsx, kept separate from the
 // component so they can be unit-tested without touching the DOM.
-import type { AppConfig, FileChangeMode, FilterConfig, ImageMode } from '../api'
+import type { AppConfig, FileChangeMode, FilterConfig, ImageMode, ThemeMode } from '../api'
 
 export function toggleFilterSwitch(cfg: AppConfig, key: keyof Omit<FilterConfig, 'fileChange' | 'truncateChars'>): AppConfig {
   return { ...cfg, filter: { ...cfg.filter, [key]: !cfg.filter[key] } }
@@ -22,4 +22,8 @@ export function setTruncateChars(cfg: AppConfig, raw: string): AppConfig {
 
 export function setOutputDirOverride(cfg: AppConfig, dir: string): AppConfig {
   return { ...cfg, outputDirOverride: dir }
+}
+
+export function setTheme(cfg: AppConfig, theme: ThemeMode): AppConfig {
+  return { ...cfg, theme }
 }

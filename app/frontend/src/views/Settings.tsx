@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { AppConfig, FilterConfig } from '../api'
-import { FileChangeMode, ImageMode, chooseOutputDir, getConfig, saveConfig } from '../api'
+import { FileChangeMode, ImageMode, ThemeMode, chooseOutputDir, getConfig, saveConfig } from '../api'
+import { applyTheme } from '../theme'
 import {
   setFileChange,
   setImageMode,
   setOutputDirOverride,
+  setTheme,
   setTruncateChars,
   toggleFilterSwitch,
 } from './settingsLogic'
@@ -29,6 +31,14 @@ export default function Settings() {
   useEffect(() => {
     getConfig().then(setCfg)
   }, [])
+
+  // Settings stays mounted for the app's whole lifetime (T1.13 keeps tabs
+  // display:none rather than unmounted), so this is the one place that
+  // reliably applies the theme on startup and on every change, regardless
+  // of which tab is currently visible (PLAN.md 12.2.1 ⑤).
+  useEffect(() => {
+    if (cfg) applyTheme(cfg.theme)
+  }, [cfg?.theme])
 
   function apply(next: AppConfig) {
     setCfg(next)
@@ -112,6 +122,37 @@ export default function Settings() {
           onChange={(e) => apply(setTruncateChars(cfg, e.target.value))}
         />
       </label>
+
+      <fieldset>
+        <legend>外观</legend>
+        <label>
+          <input
+            type="radio"
+            name="theme"
+            checked={cfg.theme === ThemeMode.System}
+            onChange={() => apply(setTheme(cfg, ThemeMode.System))}
+          />
+          跟随系统
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="theme"
+            checked={cfg.theme === ThemeMode.Light}
+            onChange={() => apply(setTheme(cfg, ThemeMode.Light))}
+          />
+          浅色
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="theme"
+            checked={cfg.theme === ThemeMode.Dark}
+            onChange={() => apply(setTheme(cfg, ThemeMode.Dark))}
+          />
+          深色
+        </label>
+      </fieldset>
 
       <fieldset>
         <legend>输出目录</legend>

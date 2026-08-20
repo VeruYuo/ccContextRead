@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { AppConfig } from '../api'
-import { FileChangeMode, ImageMode } from '../api'
+import { FileChangeMode, ImageMode, ThemeMode } from '../api'
 import {
   setFileChange,
   setImageMode,
   setOutputDirOverride,
+  setTheme,
   setTruncateChars,
   toggleFilterSwitch,
 } from './settingsLogic'
@@ -28,6 +29,7 @@ function baseConfig(): AppConfig {
     outputDirOverride: '',
     fallbackApplied: false,
     resolvedOutputDir: '',
+    theme: ThemeMode.System,
   }
 }
 
@@ -83,6 +85,15 @@ describe('setTruncateChars', () => {
   it('clamps a negative input to 0 rather than passing it through', () => {
     const next = setTruncateChars(baseConfig(), '-5')
     expect(next.filter.truncateChars).toBe(0)
+  })
+})
+
+describe('setTheme', () => {
+  it('is a three-way exclusive choice', () => {
+    const cfg = baseConfig()
+    expect(setTheme(cfg, ThemeMode.Dark).theme).toBe(ThemeMode.Dark)
+    expect(setTheme(cfg, ThemeMode.Light).theme).toBe(ThemeMode.Light)
+    expect(setTheme(cfg, ThemeMode.System).theme).toBe(ThemeMode.System)
   })
 })
 

@@ -13,6 +13,17 @@ import (
 	"ccContextRead/internal/render"
 )
 
+// Theme is the user's manual light/dark override (PLAN.md 12.2.1 ⑤ /
+// T1.17). ThemeSystem means "follow the OS setting" — the frontend resolves
+// it, this package only persists the choice.
+type Theme string
+
+const (
+	ThemeLight  Theme = "light"
+	ThemeDark   Theme = "dark"
+	ThemeSystem Theme = "system"
+)
+
 // Config is the full persisted application configuration.
 type Config struct {
 	Filter    model.FilterConfig `json:"filter"`
@@ -27,15 +38,18 @@ type Config struct {
 	// (PLAN.md T1.11 "只读安装目录的回落策略").
 	FallbackApplied   bool   `json:"fallbackApplied"`
 	ResolvedOutputDir string `json:"resolvedOutputDir"`
+	Theme             Theme  `json:"theme"`
 }
 
 // Default returns the task brief's defaults: only real user input and
 // the assistant's final reply are shown, images render as placeholders,
-// and the output directory auto-resolves to the exe-adjacent directory.
+// the output directory auto-resolves to the exe-adjacent directory, and
+// the UI follows the OS light/dark setting until the user picks one.
 func Default() Config {
 	return Config{
 		Filter:    model.DefaultFilterConfig(),
 		ImageMode: render.ImagePlaceholder,
+		Theme:     ThemeSystem,
 	}
 }
 
@@ -51,6 +65,11 @@ func Load(path string) Config {
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return Default()
+	}
+	if cfg.Theme == "" {
+		// A config file written before T1.17 has no "theme" key; the zero
+		// value must not silently mean "always light".
+		cfg.Theme = ThemeSystem
 	}
 	return cfg
 }

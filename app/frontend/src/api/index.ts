@@ -22,6 +22,14 @@ export const ImageMode = {
 } as const
 export type ImageMode = (typeof ImageMode)[keyof typeof ImageMode]
 
+// internal/config.Theme (json-tagged, string enum on the wire).
+export const ThemeMode = {
+  Light: 'light',
+  Dark: 'dark',
+  System: 'system',
+} as const
+export type ThemeMode = (typeof ThemeMode)[keyof typeof ThemeMode]
+
 // internal/model.FilterConfig (json-tagged camelCase).
 export interface FilterConfig {
   userPrompt: boolean
@@ -44,6 +52,7 @@ export interface AppConfig {
   outputDirOverride: string
   fallbackApplied: boolean
   resolvedOutputDir: string
+  theme: ThemeMode
 }
 
 // internal/app.SessionSummary (no json tags -> PascalCase on the wire).

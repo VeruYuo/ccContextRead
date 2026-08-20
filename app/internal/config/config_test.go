@@ -25,6 +25,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 		OutputDirOverride: `D:\out`,
 		FallbackApplied:   true,
 		ResolvedOutputDir: `D:\out`,
+		Theme:             ThemeDark,
 	}
 
 	if err := Save(path, want); err != nil {
@@ -84,6 +85,22 @@ func TestDefaultMatchesTaskBriefDefaults(t *testing.T) {
 	}
 	if got.OutputDirOverride != "" {
 		t.Fatalf("Default() OutputDirOverride = %q, want empty (auto-resolve)", got.OutputDirOverride)
+	}
+	if got.Theme != ThemeSystem {
+		t.Fatalf("Default() Theme = %q, want ThemeSystem (T1.17: no manual override until the user picks one)", got.Theme)
+	}
+}
+
+func TestLoadOldConfigWithoutThemeFallsBackToSystem(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	// A config file written before T1.17 has no "theme" key at all.
+	if err := os.WriteFile(path, []byte(`{"filter":{},"imageMode":0}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := Load(path)
+	if got.Theme != ThemeSystem {
+		t.Fatalf("Load() of a pre-T1.17 config file = Theme %q, want ThemeSystem", got.Theme)
 	}
 }
 

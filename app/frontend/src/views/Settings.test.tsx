@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppConfig } from '../api'
-import { FileChangeMode, ImageMode } from '../api'
+import { FileChangeMode, ImageMode, ThemeMode } from '../api'
 import Settings from './Settings'
 
 const { getConfig, saveConfig, chooseOutputDir } = vi.hoisted(() => ({
@@ -35,6 +35,7 @@ function defaultConfig(): AppConfig {
     outputDirOverride: '',
     fallbackApplied: false,
     resolvedOutputDir: 'D:\\ccContextRead',
+    theme: ThemeMode.System,
   }
 }
 
@@ -86,5 +87,27 @@ describe('Settings', () => {
     await user.click(full)
     await waitFor(() => expect(full).toBeChecked())
     expect(summary).not.toBeChecked()
+  })
+
+  it('keeps the theme radio group mutually exclusive and saves the choice (PLAN.md 12.2.1 ⑤ / T1.17)', async () => {
+    const user = userEvent.setup()
+    render(<Settings />)
+
+    const system = await screen.findByLabelText('跟随系统')
+    const light = screen.getByLabelText('浅色')
+    const dark = screen.getByLabelText('深色')
+
+    expect(system).toBeChecked()
+
+    await user.click(dark)
+    await waitFor(() => expect(dark).toBeChecked())
+    expect(system).not.toBeChecked()
+    expect(light).not.toBeChecked()
+    const saved = saveConfig.mock.calls.at(-1)?.[0] as AppConfig
+    expect(saved.theme).toBe(ThemeMode.Dark)
+
+    await user.click(light)
+    await waitFor(() => expect(light).toBeChecked())
+    expect(dark).not.toBeChecked()
   })
 })

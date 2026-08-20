@@ -27,7 +27,17 @@ let nextRenderId = 0
 // replaced html string is simply never in this map.
 const nodeGeneration = new WeakMap<HTMLElement, number>()
 
+// isDarkMode reads the theme actually in effect (PLAN.md 12.2.1 ⑤: theme.ts
+// resolves the user's light/dark/system setting and writes it onto
+// <html data-theme>), not the raw OS media query directly — a manual
+// override wouldn't otherwise be reflected here. Falls back to the media
+// query only if nothing has applied a theme yet (e.g. before Settings has
+// loaded config, or in a test that doesn't render the theme controller).
 function isDarkMode(): boolean {
+  if (typeof document !== 'undefined') {
+    const applied = document.documentElement.dataset.theme
+    if (applied) return applied === 'dark'
+  }
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches === true
 }
 
@@ -82,10 +92,17 @@ export async function renderMermaidBlocks(container: HTMLElement, loader: Loader
   const nodes = Array.from(container.querySelectorAll<HTMLElement>('[data-mermaid-src]:not([data-mermaid-done])'))
   if (nodes.length === 0) return
 
+  // Read once, synchronously, before any await: a diagram's SVG embeds its
+  // colors inline, so a light-rendered and a dark-rendered copy are not
+  // interchangeable — the cache key must include theme (PLAN.md 12.2.1 ⑤),
+  // and X's synchronous cache-hit restore below needs this value before it
+  // can look anything up.
+  const cacheKeySuffix = isDarkMode() ? ':dark' : ':light'
+
   const pending: HTMLElement[] = []
   for (const node of nodes) {
-    const hash = node.dataset.mermaidHash ?? ''
-    const cached = svgCache.get(hash)
+    const cacheKey = (node.dataset.mermaidHash ?? '') + cacheKeySuffix
+    const cached = svgCache.get(cacheKey)
     if (cached !== undefined) {
       markDone(node, cached)
     } else {
@@ -98,13 +115,13 @@ export async function renderMermaidBlocks(container: HTMLElement, loader: Loader
 
   await Promise.all(
     pending.map(async (node) => {
-      const hash = node.dataset.mermaidHash ?? ''
+      const cacheKey = (node.dataset.mermaidHash ?? '') + cacheKeySuffix
       const src = decodeURIComponent(node.dataset.mermaidSrc ?? '')
       const gen = (nodeGeneration.get(node) ?? 0) + 1
       nodeGeneration.set(node, gen)
       const isStale = () => nodeGeneration.get(node) !== gen
 
-      const renderId = `mermaid-${hash}-${nextRenderId++}`
+      const renderId = `mermaid-${node.dataset.mermaidHash ?? ''}-${nextRenderId++}`
       try {
         const parseOk = await mermaid.parse(src, { suppressErrors: true })
         if (!parseOk) throw new Error('mermaid parse failed')
@@ -128,7 +145,7 @@ export async function renderMermaidBlocks(container: HTMLElement, loader: Loader
           ADD_TAGS: ['foreignObject'],
           HTML_INTEGRATION_POINTS: { 'annotation-xml': true, foreignobject: true },
         })
-        svgCache.set(hash, clean)
+        svgCache.set(cacheKey, clean)
         if (isStale()) return
         markDone(node, clean)
       } catch {

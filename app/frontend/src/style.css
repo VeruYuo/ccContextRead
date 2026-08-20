@@ -9,17 +9,18 @@
     color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --color-bg: #1F1E1D;
-        --color-card: #262624;
-        --color-sidebar: #262624;
-        --color-text: #F5F4EE;
-        --color-text-secondary: #A3A099;
-        --color-accent: #D97757;
-        --color-border: #3A3937;
-        color-scheme: dark;
-    }
+/* T1.17: keyed off [data-theme], written by theme.ts (which resolves the
+   user's light/dark/system setting) — not @media (prefers-color-scheme)
+   directly, so a manual override actually has somewhere to take effect. */
+:root[data-theme="dark"] {
+    --color-bg: #1F1E1D;
+    --color-card: #262624;
+    --color-sidebar: #262624;
+    --color-text: #F5F4EE;
+    --color-text-secondary: #A3A099;
+    --color-accent: #D97757;
+    --color-border: #3A3937;
+    color-scheme: dark;
 }
 
 html {
