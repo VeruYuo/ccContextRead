@@ -101,9 +101,15 @@ export async function renderMermaidBlocks(container: HTMLElement, loader: Loader
         // Defense in depth for 问题②: if mermaid still painted its error
         // graphic into the DOM despite suppressErrorRendering, remove it —
         // mermaid has historically used both the bare id and a `d`-prefixed
-        // id for this temporary container.
-        document.getElementById(renderId)?.remove()
-        document.getElementById(`d${renderId}`)?.remove()
+        // id for this temporary container. Must check node.contains() first:
+        // on success, mermaid's own <svg id="renderId"> is now legitimately
+        // inside `node` (we just put it there), and getElementById would
+        // find that instead of a stray error node and delete the diagram we
+        // just rendered.
+        for (const strayId of [renderId, `d${renderId}`]) {
+          const stray = document.getElementById(strayId)
+          if (stray && !node.contains(stray)) stray.remove()
+        }
       }
     }),
   )
