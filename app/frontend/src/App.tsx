@@ -128,7 +128,7 @@ function App() {
             </button>
           </nav>
           <div style={{ display: tab === 'preview' ? 'contents' : 'none' }}>
-            <Preview selectedId={selectedId} doc={doc} />
+            <Preview selectedId={selectedId} doc={doc} visible={tab === 'preview'} />
           </div>
           <div style={{ display: tab === 'settings' ? 'contents' : 'none' }}>
             <Settings />

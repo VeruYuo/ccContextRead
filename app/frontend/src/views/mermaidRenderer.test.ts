@@ -94,7 +94,11 @@ describe('renderMermaidBlocks', () => {
   })
 
   it('initializes mermaid with suppressErrorRendering so the library never mounts its own error graphic', async () => {
-    const container = makeContainer('```mermaid\ngraph TD; A-->B;\n```')
+    // Unique diagram content: with the 问题④ X cache short-circuit, a
+    // hash already cached from an earlier test would skip loadMermaid()
+    // (and thus initialize()) entirely, which is correct production
+    // behavior but would make this specific assertion meaningless.
+    const container = makeContainer('```mermaid\ngraph TD; K-->L;\n```')
     const initialize = vi.fn()
     const parse = vi.fn().mockResolvedValue(true)
     const render = vi.fn().mockResolvedValue({ svg: '<svg viewBox="0 0 1 1"></svg>' })
@@ -116,6 +120,41 @@ describe('renderMermaidBlocks', () => {
     const block = container.querySelector('.mermaid-block')
     expect(block?.querySelector('pre.mermaid-fallback')).not.toBeNull()
     expect(block?.textContent).toContain('bad syntax')
+  })
+
+  it('restores an already-cached diagram synchronously, before the returned promise settles (PLAN.md 12.2.1 问题④ X)', async () => {
+    const markdown = '```mermaid\ngraph TD; G-->H;\n```'
+    const render = vi.fn().mockResolvedValue({ svg: '<svg viewBox="0 0 3 3"></svg>' })
+    const loader = stubLoader(render)
+
+    const first = makeContainer(markdown)
+    await renderMermaidBlocks(first, loader)
+    expect(render).toHaveBeenCalledTimes(1)
+
+    // Simulate a tab round-trip: a fresh placeholder node with the same
+    // diagram source/hash (React re-applied the original unrendered HTML).
+    const second = makeContainer(markdown)
+    const pending = renderMermaidBlocks(second, loader) // deliberately not awaited yet
+    expect(second.querySelector('svg')).not.toBeNull()
+    expect(render).toHaveBeenCalledTimes(1) // cache hit — no extra mermaid.render call
+    await pending
+  })
+
+  it('retries a node on the next pass after a failed attempt instead of degrading permanently (PLAN.md 12.2.1 问题④ Z)', async () => {
+    const container = makeContainer('```mermaid\ngraph TD; I-->J;\n```')
+    const render = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce({ svg: '<svg viewBox="0 0 4 4"></svg>' })
+    const loader = stubLoader(render)
+
+    await renderMermaidBlocks(container, loader)
+    expect(container.querySelector('pre.mermaid-fallback')).not.toBeNull()
+    expect(container.querySelector('svg')).toBeNull()
+
+    await renderMermaidBlocks(container, loader)
+    expect(render).toHaveBeenCalledTimes(2)
+    expect(container.querySelector('svg')).not.toBeNull()
   })
 
   it('removes the mermaid-library error node left in document.body before rejecting, and degrades to a fallback code block', async () => {

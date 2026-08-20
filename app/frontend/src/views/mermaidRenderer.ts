@@ -19,6 +19,14 @@ const defaultLoader: Loader = () => import('mermaid')
 const svgCache = new Map<string, string>()
 let nextRenderId = 0
 
+// nodeGeneration guards against a stale async render round clobbering a
+// fresher one for the *same* DOM node (PLAN.md 12.2.1 问题④ Z). This only
+// matters when the same node is targeted twice before the first round
+// resolves (e.g. a tab visibility flip re-triggers the effect while a slow
+// render() from before is still in flight); a brand-new node from a
+// replaced html string is simply never in this map.
+const nodeGeneration = new WeakMap<HTMLElement, number>()
+
 function isDarkMode(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches === true
 }
@@ -46,28 +54,55 @@ function escapeHtml(input: string): string {
   return input.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+function markDone(node: HTMLElement, html: string): void {
+  node.innerHTML = html
+  node.removeAttribute('data-mermaid-src')
+  node.setAttribute('data-mermaid-done', 'true')
+}
+
 // renderMermaidBlocks finds unrendered mermaid placeholders (see
 // markdownRender.ts) inside container and replaces each with its rendered,
 // sanitized SVG. A diagram that fails to parse degrades to a code block
 // instead of throwing, and does not affect any other diagram in the same
 // container (PLAN.md T1.16 边界).
+//
+// PLAN.md 12.2.1 问题④: a tab round-trip (or any doc update while the
+// preview is hidden) can reset the DOM back to the placeholder markup for a
+// diagram that was already rendered once. Two things make that recoverable
+// rather than a permanent regression to the code block:
+//  - X: nodes whose hash is already in svgCache are restored synchronously,
+//    before any `await` — so even a caller that never awaits this promise
+//    (e.g. a React effect) sees them reappear immediately.
+//  - Z: `data-mermaid-src` is only removed (and `data-mermaid-done` set) on
+//    success, so a failed attempt stays selectable by the query below and
+//    gets retried on the next pass instead of degrading forever; a
+//    per-node generation counter discards a stale round's result if a
+//    fresher round already started for the same node.
 export async function renderMermaidBlocks(container: HTMLElement, loader: Loader = defaultLoader): Promise<void> {
-  const nodes = Array.from(container.querySelectorAll<HTMLElement>('[data-mermaid-src]'))
+  const nodes = Array.from(container.querySelectorAll<HTMLElement>('[data-mermaid-src]:not([data-mermaid-done])'))
   if (nodes.length === 0) return
+
+  const pending: HTMLElement[] = []
+  for (const node of nodes) {
+    const hash = node.dataset.mermaidHash ?? ''
+    const cached = svgCache.get(hash)
+    if (cached !== undefined) {
+      markDone(node, cached)
+    } else {
+      pending.push(node)
+    }
+  }
+  if (pending.length === 0) return
 
   const mermaid = await loadMermaid(loader)
 
   await Promise.all(
-    nodes.map(async (node) => {
+    pending.map(async (node) => {
       const hash = node.dataset.mermaidHash ?? ''
       const src = decodeURIComponent(node.dataset.mermaidSrc ?? '')
-      node.removeAttribute('data-mermaid-src')
-
-      const cached = svgCache.get(hash)
-      if (cached !== undefined) {
-        node.innerHTML = cached
-        return
-      }
+      const gen = (nodeGeneration.get(node) ?? 0) + 1
+      nodeGeneration.set(node, gen)
+      const isStale = () => nodeGeneration.get(node) !== gen
 
       const renderId = `mermaid-${hash}-${nextRenderId++}`
       try {
@@ -94,8 +129,12 @@ export async function renderMermaidBlocks(container: HTMLElement, loader: Loader
           HTML_INTEGRATION_POINTS: { 'annotation-xml': true, foreignobject: true },
         })
         svgCache.set(hash, clean)
-        node.innerHTML = clean
+        if (isStale()) return
+        markDone(node, clean)
       } catch {
+        if (isStale()) return
+        // Deliberately does not remove data-mermaid-src or set
+        // data-mermaid-done: this node stays selectable on the next pass.
         node.innerHTML = `<pre class="mermaid-fallback"><code>${escapeHtml(src)}</code></pre>`
       } finally {
         // Defense in depth for 问题②: if mermaid still painted its error
