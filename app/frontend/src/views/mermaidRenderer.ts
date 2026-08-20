@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify'
 export interface MermaidModule {
   default: {
     initialize: (options: Record<string, unknown>) => void
+    parse: (text: string, options: { suppressErrors: true }) => Promise<unknown>
     render: (id: string, text: string) => Promise<{ svg: string }>
   }
 }
@@ -29,7 +30,15 @@ function isDarkMode(): boolean {
 // keeps the diagram theme in sync with the current light/dark mode.
 async function loadMermaid(loader: Loader): Promise<MermaidModule['default']> {
   const mermaid = (await loader()).default
-  mermaid.initialize({ startOnLoad: false, theme: isDarkMode() ? 'dark' : 'default' })
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: isDarkMode() ? 'dark' : 'default',
+    // mermaid v11 paints its own "bomb + Syntax error" graphic into the DOM
+    // before rejecting render() — suppressErrorRendering stops that at the
+    // source (PLAN.md 12.2.1 问题②). The parse() precheck and finally-block
+    // cleanup below are defense in depth in case a version doesn't honor it.
+    suppressErrorRendering: true,
+  })
   return mermaid
 }
 
@@ -60,13 +69,41 @@ export async function renderMermaidBlocks(container: HTMLElement, loader: Loader
         return
       }
 
+      const renderId = `mermaid-${hash}-${nextRenderId++}`
       try {
-        const { svg } = await mermaid.render(`mermaid-${hash}-${nextRenderId++}`, src)
-        const clean = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } })
+        const parseOk = await mermaid.parse(src, { suppressErrors: true })
+        if (!parseOk) throw new Error('mermaid parse failed')
+
+        const { svg } = await mermaid.render(renderId, src)
+        // Three settings, all required together (PLAN.md 12.2.1 问题①):
+        // mermaid v11's default htmlLabels:true renders flowchart node text as
+        // <foreignObject><div class="nodeLabel"><span>…</span></div></foreignObject>.
+        //  - html profile allows div/span at all (svg/svgFilters alone don't).
+        //  - foreignObject is hardcoded into DOMPurify's hidden default
+        //    FORBID_TAGS-adjacent disallow list — ADD_TAGS is required just to
+        //    keep the wrapper itself.
+        //  - even kept, DOMPurify's namespace check only lets HTML content
+        //    live inside foreignObject if 'foreignobject' is a declared HTML
+        //    integration point; DOMPurify's own default only lists
+        //    'annotation-xml' (a MathML integration point), so without this
+        //    override every element inside foreignObject is force-removed
+        //    (not hoisted) regardless of the html/ADD_TAGS settings above.
+        const clean = DOMPurify.sanitize(svg, {
+          USE_PROFILES: { svg: true, svgFilters: true, html: true },
+          ADD_TAGS: ['foreignObject'],
+          HTML_INTEGRATION_POINTS: { 'annotation-xml': true, foreignobject: true },
+        })
         svgCache.set(hash, clean)
         node.innerHTML = clean
       } catch {
         node.innerHTML = `<pre class="mermaid-fallback"><code>${escapeHtml(src)}</code></pre>`
+      } finally {
+        // Defense in depth for 问题②: if mermaid still painted its error
+        // graphic into the DOM despite suppressErrorRendering, remove it —
+        // mermaid has historically used both the bare id and a `d`-prefixed
+        // id for this temporary container.
+        document.getElementById(renderId)?.remove()
+        document.getElementById(`d${renderId}`)?.remove()
       }
     }),
   )

@@ -10,8 +10,11 @@ function makeContainer(markdown: string): HTMLDivElement {
   return div
 }
 
-function stubLoader(render: MermaidModule['default']['render']): () => Promise<MermaidModule> {
-  return async () => ({ default: { initialize: vi.fn(), render } })
+function stubLoader(
+  render: MermaidModule['default']['render'],
+  parse: MermaidModule['default']['parse'] = vi.fn().mockResolvedValue(true),
+): () => Promise<MermaidModule> {
+  return async () => ({ default: { initialize: vi.fn(), parse, render } })
 }
 
 describe('renderMermaidBlocks', () => {
@@ -70,5 +73,70 @@ describe('renderMermaidBlocks', () => {
     await renderMermaidBlocks(container, loader)
 
     expect(loader).not.toHaveBeenCalled()
+  })
+
+  it('keeps foreignObject node-label text through sanitization (flowchart htmlLabels shape)', async () => {
+    const container = makeContainer('```mermaid\nflowchart TD; A-->B;\n```')
+    const svg =
+      '<svg viewBox="0 0 10 10"><g class="node">' +
+      '<rect/>' +
+      '<foreignObject width="20" height="10">' +
+      '<div xmlns="http://www.w3.org/1999/xhtml" class="nodeLabel"><span class="nodeLabel">JSONL 会话文件</span></div>' +
+      '</foreignObject>' +
+      '</g></svg>'
+    const render = vi.fn().mockResolvedValue({ svg })
+
+    await renderMermaidBlocks(container, stubLoader(render))
+
+    const label = container.querySelector('.nodeLabel')
+    expect(label).not.toBeNull()
+    expect(label?.textContent).toContain('JSONL 会话文件')
+  })
+
+  it('initializes mermaid with suppressErrorRendering so the library never mounts its own error graphic', async () => {
+    const container = makeContainer('```mermaid\ngraph TD; A-->B;\n```')
+    const initialize = vi.fn()
+    const parse = vi.fn().mockResolvedValue(true)
+    const render = vi.fn().mockResolvedValue({ svg: '<svg viewBox="0 0 1 1"></svg>' })
+    const loader = async () => ({ default: { initialize, parse, render } })
+
+    await renderMermaidBlocks(container, loader)
+
+    expect(initialize).toHaveBeenCalledWith(expect.objectContaining({ suppressErrorRendering: true }))
+  })
+
+  it('skips mermaid.render entirely when mermaid.parse reports invalid syntax', async () => {
+    const container = makeContainer('```mermaid\nbad syntax ((\n```')
+    const parse = vi.fn().mockResolvedValue(false)
+    const render = vi.fn()
+
+    await renderMermaidBlocks(container, stubLoader(render, parse))
+
+    expect(render).not.toHaveBeenCalled()
+    const block = container.querySelector('.mermaid-block')
+    expect(block?.querySelector('pre.mermaid-fallback')).not.toBeNull()
+    expect(block?.textContent).toContain('bad syntax')
+  })
+
+  it('removes the mermaid-library error node left in document.body before rejecting, and degrades to a fallback code block', async () => {
+    const container = makeContainer('```mermaid\nbad syntax ((\n```')
+    const render = vi.fn().mockImplementation(async (id: string) => {
+      const bomb = document.createElement('div')
+      bomb.id = id
+      bomb.className = 'mermaid-error-bomb'
+      document.body.appendChild(bomb)
+      const dPrefixed = document.createElement('div')
+      dPrefixed.id = `d${id}`
+      dPrefixed.className = 'mermaid-error-bomb'
+      document.body.appendChild(dPrefixed)
+      throw new Error('Parse error')
+    })
+
+    await renderMermaidBlocks(container, stubLoader(render))
+
+    expect(document.querySelectorAll('.mermaid-error-bomb')).toHaveLength(0)
+    const block = container.querySelector('.mermaid-block')
+    expect(block?.querySelector('pre.mermaid-fallback')).not.toBeNull()
+    expect(block?.querySelector('svg')).toBeNull()
   })
 })
