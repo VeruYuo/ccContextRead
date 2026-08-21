@@ -15,27 +15,6 @@ Claude Code writes every conversation to `~/.claude/projects/**/*.jsonl` in a ma
 
 Single exe, double-click to run — no need to install Go / Node / Pandoc on the target machine.
 
-## Status
-
-- ✅ **M1 complete**: session discovery & enumeration, real-time incremental rendering, content filtering, GUI shell, theme switching, Mermaid + syntax highlighting.
-- 🚧 **M2 planned**: export to PDF / DOCX / HTML.
-- 🚧 **M3 planned**: Trajectory view — an append-only event stream for inspecting every detail of a session (chain of thought, tool calls and results, sub-agent dispatch, context injection, token usage and timing).
-
-## Known limitations
-
-Stated plainly, without overselling:
-
-- **No raw system prompt.** We can capture incremental injections in attachment form (skill lists, MCP descriptions, task reminders, etc.), but the base system prompt itself is never written to the JSONL log.
-- **No per-chunk streaming frames**, so time-to-first-token (TTFT) cannot be computed; the timeline can only go down to per-turn duration.
-- **No request-level HTTP headers / schema** available for inspection.
-- Verified and distributed for Windows x64 only. The code stays portable, but cross-platform support isn't a goal.
-
-## Data safety
-
-- `~/.claude/` is treated as **read-only at all times** — this program never modifies, deletes, or moves anything in it.
-- The only directory it ever writes to is the output directory you configure in settings.
-- No network access, no cloud sync, no account system (PDF rendering, when you export, happens entirely locally too).
-
 ## Download
 
 Grab the latest `ccContextRead.exe` from the [Releases](../../releases) page and double-click to run (requires the [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/), which ships with Windows 10/11 in most cases).
