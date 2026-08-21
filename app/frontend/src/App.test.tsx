@@ -199,6 +199,39 @@ describe('App session selection', () => {
   })
 })
 
+describe('App session switch race (PLAN.md 12.2.1 问题③)', () => {
+  it('does not display a stale snapshot for a different session, and recovers on the next session:updated', async () => {
+    listSessions.mockResolvedValue([
+      { SessionID: 'sess1', ProjectDir: 'D:/p', ProjectName: 'p', Title: 'Sess One', Path: 'x', CreatedAt: '', LastActiveAt: '', IsActive: true },
+      { SessionID: 'sess2', ProjectDir: 'D:/p', ProjectName: 'p', Title: 'Sess Two', Path: 'y', CreatedAt: '', LastActiveAt: '', IsActive: true },
+    ])
+    // Simulates the backend race in PLAN.md App.tsx:49: whichever session is
+    // requested, the snapshot fetch resolves to the *previous* session's
+    // document, as if StartWatching(sess2) hadn't caught up on the backend
+    // side yet when the snapshot request landed.
+    getCurrentDocument.mockResolvedValue({
+      Event: makeUpdateEvent({ SessionID: 'sess1', Markdown: '# stale sess1 content' }),
+      Ok: true,
+    })
+
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(await screen.findByText('Sess Two'))
+
+    // The stale sess1 snapshot must never be shown while sess2 is selected.
+    await waitFor(() => expect(screen.queryByText('stale sess1 content')).not.toBeInTheDocument())
+
+    // A correct session:updated for sess2 must still get through — with the
+    // old prev.SessionID-based guard, the stale doc above would have set
+    // prev.SessionID to 'sess1', permanently rejecting every future sess2
+    // event ("此后A的所有事件永远被拒" in PLAN.md).
+    emitSessionUpdated(makeUpdateEvent({ SessionID: 'sess2', Markdown: '# live sess2 content' }))
+
+    await waitFor(() => expect(screen.getByText('live sess2 content')).toBeInTheDocument())
+  })
+})
+
 describe('App session list refresh', () => {
   it('refetches the session list when sessions:changed fires', async () => {
     render(<App />)

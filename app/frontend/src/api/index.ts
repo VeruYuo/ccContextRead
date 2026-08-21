@@ -106,8 +106,8 @@ export interface UpdateEvent {
   Full: boolean
 }
 
-// main.CurrentDocumentResult (GetCurrentDocument's return value). Wrapped
-// in a struct rather than a (UpdateEvent, bool) Go return because Wails'
+// main.CurrentDocumentResult (GetDocument's return value). Wrapped in a
+// struct rather than a (UpdateEvent, bool) Go return because Wails'
 // generated binding only preserves a second return value when it's an
 // `error` — any other type is silently dropped on the wire.
 export interface CurrentDocumentResult {
@@ -159,8 +159,13 @@ export function getStatus(): Promise<StatusInfo> {
   return Backend.GetStatus()
 }
 
-export function getCurrentDocument(): Promise<CurrentDocumentResult> {
-  return Backend.GetCurrentDocument() as unknown as Promise<CurrentDocumentResult>
+// getCurrentDocument fetches the snapshot for sessionID specifically — the
+// backend rejects (Ok:false) if sessionID isn't the session it's currently
+// watching, rather than silently returning whatever it has (PLAN.md
+// 12.2.1 问题③ fix 4: the no-arg GetCurrentDocument was the root cause of
+// the frontend/backend switch race, not just a frontend guard problem).
+export function getCurrentDocument(sessionID: string): Promise<CurrentDocumentResult> {
+  return Backend.GetDocument(sessionID) as unknown as Promise<CurrentDocumentResult>
 }
 
 export function listLiveSessions(): Promise<LiveSessionInfo[]> {
