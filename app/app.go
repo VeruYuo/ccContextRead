@@ -157,14 +157,17 @@ type CurrentDocumentResult struct {
 	Ok    bool
 }
 
-// GetCurrentDocument returns the most-recently rendered document for the
-// actively watched session, if any (PLAN.md T1.13): it lets the frontend
-// fetch a snapshot on demand — after a tab switch, after selecting a
-// session, or after a follow-mode auto-switch — instead of only relying on
-// the next "session:updated" event, which may already have fired before the
-// frontend was ready to receive it.
-func (a *App) GetCurrentDocument() CurrentDocumentResult {
-	ev, ok := a.svc.CurrentDocument()
+// GetDocument returns the most-recently rendered document for sessionID, if
+// it is the actively watched session (PLAN.md T1.13 + 12.2.1 问题③): it lets
+// the frontend fetch a snapshot on demand — after a tab switch, after
+// selecting a session, or after a follow-mode auto-switch — instead of only
+// relying on the next "session:updated" event, which may already have fired
+// before the frontend was ready to receive it. Requiring sessionID (rather
+// than the old no-arg GetCurrentDocument) lets the backend reject a request
+// that races an in-flight StartWatching to a different session, instead of
+// silently returning whichever session is still being watched.
+func (a *App) GetDocument(sessionID string) CurrentDocumentResult {
+	ev, ok := a.svc.CurrentDocument(sessionID)
 	return CurrentDocumentResult{Event: ev, Ok: ok}
 }
 

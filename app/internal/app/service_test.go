@@ -330,7 +330,7 @@ func TestService_SetFollowActive_SwitchesToMostRecentLiveKnownSession(t *testing
 
 func TestService_CurrentDocument_OkFalseBeforeWatching(t *testing.T) {
 	svc := NewService(newFakeEmitter(), t.TempDir(), t.TempDir())
-	_, ok := svc.CurrentDocument()
+	_, ok := svc.CurrentDocument("11111111-1111-4111-8111-111111111111")
 	if ok {
 		t.Error("CurrentDocument() ok = true before StartWatching, want false")
 	}
@@ -350,7 +350,7 @@ func TestService_CurrentDocument_OkFalseAfterStopWatching(t *testing.T) {
 	<-emitter.updates
 	svc.StopWatching()
 
-	_, ok := svc.CurrentDocument()
+	_, ok := svc.CurrentDocument(sessionID)
 	if ok {
 		t.Error("CurrentDocument() ok = true after StopWatching, want false")
 	}
@@ -370,7 +370,7 @@ func TestService_CurrentDocument_ReturnsMostRecentMarkdown(t *testing.T) {
 	defer svc.StopWatching()
 	<-emitter.updates
 
-	ev, ok := svc.CurrentDocument()
+	ev, ok := svc.CurrentDocument(sessionID)
 	if !ok {
 		t.Fatal("CurrentDocument() ok = false after StartWatching, want true")
 	}
@@ -404,12 +404,44 @@ func TestService_CurrentDocument_SwitchSession_ReturnsNewSessionDoc(t *testing.T
 	defer svc.StopWatching()
 	<-emitter.updates
 
-	ev, ok := svc.CurrentDocument()
+	ev, ok := svc.CurrentDocument(sid2)
 	if !ok {
 		t.Fatal("CurrentDocument() ok = false after switching sessions, want true")
 	}
 	if ev.SessionID != sid2 {
 		t.Errorf("CurrentDocument().SessionID = %q, want %q (new session)", ev.SessionID, sid2)
+	}
+}
+
+// TestService_CurrentDocument_OkFalseOnSessionIDMismatch covers PLAN.md
+// 12.2.1 问题③ fix 4: a caller asking for a session other than the one
+// actually being watched must get ok=false, not whatever document happens
+// to be loaded. This is what lets the frontend tell "the backend hasn't
+// caught up to my StartWatching yet" apart from "here's your data".
+func TestService_CurrentDocument_OkFalseOnSessionIDMismatch(t *testing.T) {
+	configDir := t.TempDir()
+	exeDir := t.TempDir()
+	sid1 := "11111111-1111-4111-8111-111111111111"
+	sid2 := "22222222-2222-4222-8222-222222222222"
+	writeSessionFile(t, configDir, "p1", sid1, "D:/ProjOne", "2026-08-10T09:00:00.000Z", "session one content")
+
+	emitter := newFakeEmitter()
+	svc := NewService(emitter, configDir, exeDir)
+	if err := svc.StartWatching(sid1); err != nil {
+		t.Fatalf("StartWatching() error = %v", err)
+	}
+	defer svc.StopWatching()
+	<-emitter.updates
+
+	// sid2 was never watched, so asking for it while sid1 is active must
+	// not return sid1's document.
+	if _, ok := svc.CurrentDocument(sid2); ok {
+		t.Error("CurrentDocument(sid2) ok = true while watching sid1, want false")
+	}
+	// sid1 itself must still work — the check rejects mismatches, not every
+	// request.
+	if ev, ok := svc.CurrentDocument(sid1); !ok || ev.SessionID != sid1 {
+		t.Errorf("CurrentDocument(sid1) = %+v, %v, want matching sid1 doc, true", ev, ok)
 	}
 }
 
@@ -498,7 +530,7 @@ func TestService_CurrentDocument_ConcurrentStartWatching_NoDeadlock(t *testing.T
 	go func() {
 		defer close(done)
 		for range 50 {
-			svc.CurrentDocument()
+			svc.CurrentDocument(sessionID)
 		}
 	}()
 
