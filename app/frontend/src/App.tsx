@@ -17,6 +17,31 @@ import Settings from './views/Settings'
 
 type Tab = 'preview' | 'settings'
 
+// sameContent compares only the fields Preview actually renders from
+// (SessionID + Markdown) — EventCount/OutputPath/Full can legitimately
+// differ between the session:updated event and the immediately-following
+// getCurrentDocument snapshot for what is otherwise the exact same
+// render pass, and treating those as "changed" was causing setDoc to fire
+// twice for identical content. React remounts the preview container's DOM
+// on every dangerouslySetInnerHTML commit regardless of whether the *value*
+// of the html string is unchanged (it always receives a fresh
+// {__html: ...} object literal from Preview's JSX), so a second, redundant
+// setDoc for content already on screen could replace the container out
+// from under a mermaid diagram that was still rendering into the first
+// one — the render would finish into a now-detached node, invisible to the
+// user, permanently stuck showing the raw code-block placeholder instead
+// (observed switching sessions A -> B -> A: reported 2026-08-21, same
+// symptom as PLAN.md 12.2.1 问题④ but triggered by session switching
+// rather than a tab round-trip). Skipping the redundant setDoc via the
+// functional updater (React bails out of re-rendering when it returns the
+// same object reference) prevents the second, unnecessary DOM replacement
+// entirely, rather than trying to make the mermaid layer robust against it.
+function sameContent(a: UpdateEvent | null, b: UpdateEvent | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.SessionID === b.SessionID && a.Markdown === b.Markdown
+}
+
 function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   // Mirrors selectedId synchronously (state updates are batched/async, but
@@ -52,7 +77,8 @@ function App() {
     getCurrentDocument(id).then(({ Event, Ok }) => {
       if (generation !== fetchGenerationRef.current) return
       if (selectedIdRef.current !== id) return
-      setDoc(Ok && Event.SessionID === id ? Event : null)
+      const next = Ok && Event.SessionID === id ? Event : null
+      setDoc((prev) => (sameContent(prev, next) ? prev : next))
     })
   }, [])
 
@@ -75,7 +101,7 @@ function App() {
       EventCount: ev.EventCount,
       LastUpdatedAt: new Date().toISOString(),
     })
-    setDoc(ev)
+    setDoc((prev) => (sameContent(prev, ev) ? prev : ev))
   })
 
   useError((ev) => {
