@@ -7,9 +7,10 @@ sample3-dsh/
 CLAUDE.md
 problems.md
 res.md
-res.md
+res2.md
 tasks.md
 PLAN.md
+req.md
 
 # ---- 密钥 ----
 testkey.md
@@ -44,6 +45,9 @@ vite.config.*.timestamp-*
 # ---- 程序运行输出（会话导出目录） ----
 /output/
 /out/
+
+# ---- 本地发布产物暂存（发布到 GitHub Release 附件，不进版本库） ----
+/releases/
 
 # ---- 编辑器 / 系统 ----
 .vscode/
